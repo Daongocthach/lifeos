@@ -1,0 +1,16 @@
+/* Final visual polish matching the LifeOS login + dashboard reference */
+.auth-visual{background:
+  radial-gradient(circle at 68% 30%,rgba(120,190,210,.18),transparent 28%),
+  radial-gradient(circle at 20% 72%,rgba(65,224,177,.10),transparent 25%),
+  linear-gradient(145deg,#10293a 0%,#091923 48%,#050b10 100%)}
+.auth-visual:before{background:
+  linear-gradient(180deg,rgba(3,9,13,.02) 0%,rgba(3,9,13,.08) 45%,rgba(3,7,10,.86) 100%),
+  repeating-linear-gradient(90deg,transparent 0,transparent 24.8%,rgba(255,255,255,.018) 25%,transparent 25.2%)}
+.login-card{backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);background:linear-gradient(145deg,rgba(22,34,43,.94),rgba(10,18,24,.96));box-shadow:0 28px 80px rgba(0,0,0,.46),inset 0 1px rgba(255,255,255,.035)}
+.primary{box-shadow:0 10px 28px rgba(55,220,174,.16);transition:transform .18s ease,box-shadow .18s ease,filter .18s ease}
+.primary:hover{transform:translateY(-1px);filter:brightness(1.05);box-shadow:0 14px 34px rgba(55,220,174,.22)}
+.stat-card,.chart-card,.mini-card,.wide-card,.content-panel,.entry-card{box-shadow:inset 0 1px rgba(255,255,255,.025),0 12px 32px rgba(0,0,0,.10)}
+.stat-card{transition:transform .18s ease,border-color .18s ease}.stat-card:hover{transform:translateY(-2px);border-color:#35505d}
+.nav-item{transition:background .16s ease,color .16s ease,transform .16s ease}.nav-item:hover{transform:translateX(2px)}
+@media(max-width:900px){.auth-page{grid-template-columns:1fr}.auth-visual{min-height:430px}.auth-side{min-height:570px}.visual-copy{margin-top:90px}.desk-copy{display:none}.dashboard{padding:16px}.sidebar{width:205px}.stat-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){.auth-visual{min-height:360px;padding:24px}.visual-copy{margin-top:65px}.visual-copy h1{font-size:24px}.benefits{margin-top:30px;gap:8px}.benefits div{font-size:10px}.auth-side{padding:20px;min-height:590px}.login-card{padding:25px}.sidebar{width:100%;border-right:0;border-bottom:1px solid #1d2a32;padding:14px}.sidebar nav{grid-template-columns:repeat(4,1fr)}.nav-item{height:38px;padding:0 8px;justify-content:center;font-size:11px}.nav-item i{display:none}.profile,.logout{display:none}.stat-grid,.analytics-grid,.lower-grid,.bottom-grid{grid-template-columns:1fr}.dashboard{padding:12px}.hero{min-height:165px;padding:23px}.hero h1{font-size:25px}}
