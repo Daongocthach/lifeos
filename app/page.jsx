@@ -7,182 +7,47 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://vqvlpfcxnyw
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_9Gu4TCc7eeFVsdlkzQc_DQ_M-GGq281'
 const db = createClient(supabaseUrl, supabaseKey)
 
-const navItems = [
-  ['⌂', 'Overview'],
-  ['▣', 'Finance'],
-  ['♢', 'Gym'],
-  ['♜', 'Nutrition'],
-  ['◉', 'Funds'],
-  ['□', 'Calendar'],
-  ['⌁', 'Analytics'],
-  ['⚙', 'Settings'],
-]
+const navItems = [['⌂','Overview'],['▣','Finance'],['♢','Gym'],['♜','Nutrition'],['◉','Funds'],['□','Calendar'],['⌁','Analytics'],['⚙','Settings']]
+const money = n => new Intl.NumberFormat('vi-VN').format(Math.round(n)) + ' ₫'
+const dateText = d => d ? new Intl.DateTimeFormat('vi-VN').format(new Date(`${d}T00:00:00`)) : '—'
+const todayLocal = () => { const d=new Date(); const offset=d.getTimezoneOffset()*60000; return new Date(d.getTime()-offset).toISOString().slice(0,10) }
+const categoryNames = {'a8c62218-aeee-46fc-91ae-5602719303d5':'Lương','0ab90e7d-a1d0-4caa-b0ce-7013663a3ee9':'Thu nhập phụ','7bda9dc5-f556-4c3c-b395-6079ecd7afaf':'Tiết kiệm','aaf52baf-a475-402f-8c9a-885cb8ecb360':'Trả nợ','97755592-862f-415d-94c6-ca4a9cfa057e':'Nhà ở','e14bb716-5833-41d7-aaa1-9beb585dd2e3':'Gia đình','8199b7a5-6605-42d3-839d-2a84ecd90a91':'Ăn uống','3959c1ba-d030-4bff-a8e9-abc3f81c4438':'Di chuyển','e9b5787d-2ca2-4fd5-a7c5-a21a8008a429':'Mua sắm','99bb8a2b-e575-4bfa-852b-bc7e1d22bc70':'Hoá đơn','941db76a-17e6-4163-bfd6-a4a12cab6b6f':'Sức khoẻ','24c1eea8-512f-4218-9a64-d33b2cb6eaef':'Khác'}
+const expenseCategories = Object.entries(categoryNames).filter(([id])=>!['a8c62218-aeee-46fc-91ae-5602719303d5','0ab90e7d-a1d0-4caa-b0ce-7013663a3ee9','7bda9dc5-f556-4c3c-b395-6079ecd7afaf'].includes(id))
+const incomeCategories = Object.entries(categoryNames).filter(([id])=>['a8c62218-aeee-46fc-91ae-5602719303d5','0ab90e7d-a1d0-4caa-b0ce-7013663a3ee9'].includes(id))
 
-const money = (n) => new Intl.NumberFormat('vi-VN').format(Math.round(n)) + ' ₫'
-const todayLocal = () => {
-  const d = new Date()
-  const offset = d.getTimezoneOffset() * 60000
-  return new Date(d.getTime() - offset).toISOString().slice(0, 10)
+export default function Page(){
+ const [user,setUser]=useState(null),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[tab,setTab]=useState('Overview'),[msg,setMsg]=useState('')
+ const [transactions,setTransactions]=useState([]),[categories,setCategories]=useState([]),[modalOpen,setModalOpen]=useState(false),[editingId,setEditingId]=useState(null)
+ const [amount,setAmount]=useState(''),[desc,setDesc]=useState(''),[date,setDate]=useState(todayLocal()),[income,setIncome]=useState(false),[categoryId,setCategoryId]=useState('8199b7a5-6605-42d3-839d-2a84ecd90a91')
+ const [reps,setReps]=useState(''),[sets,setSets]=useState(''),[weight,setWeight]=useState(''),[exercise,setExercise]=useState(''),[exercises,setExercises]=useState([])
+ useEffect(()=>{db.auth.getSession().then(({data})=>setUser(data.session?.user||null));const x=db.auth.onAuthStateChange((_e,s)=>setUser(s?.user||null));return()=>x.data.subscription.unsubscribe()},[])
+ useEffect(()=>{if(!user)return;db.from('exercises').select('id,name').order('name').then(({data})=>setExercises(data||[]));db.from('finance_categories').select('id,name,type,is_active').eq('is_active',true).order('name').then(({data})=>setCategories(data||[]));loadTransactions()},[user])
+ async function loadTransactions(){if(!user)return;const {data,error}=await db.from('finance_transactions').select('id,amount,description,occurred_on,category_id,note,created_at').order('occurred_on',{ascending:false}).order('created_at',{ascending:false});if(error)setMsg(error.message);setTransactions(data||[])}
+ async function login(){const r=await db.auth.signInWithPassword({email,password});setMsg(r.error?.message||'')}
+ async function signup(){const r=await db.auth.signUp({email,password});setMsg(r.error?.message||'Check your email.')}
+ function openAdd(){setEditingId(null);setAmount('');setDesc('');setDate(todayLocal());setIncome(false);setCategoryId('8199b7a5-6605-42d3-839d-2a84ecd90a91');setMsg('');setModalOpen(true)}
+ function openEdit(t){setEditingId(t.id);setAmount(String(Math.abs(Number(t.amount))));setDesc(t.description||'');setDate(t.occurred_on);setIncome(Number(t.amount)>0);setCategoryId(t.category_id||(Number(t.amount)>0?'a8c62218-aeee-46fc-91ae-5602719303d5':'8199b7a5-6605-42d3-839d-2a84ecd90a91'));setMsg('');setModalOpen(true)}
+ async function saveTx(){if(!amount||!desc||!date||!categoryId)return setMsg('Vui lòng nhập đủ số tiền, nội dung, ngày và danh mục.');const payload={occurred_on:date,description:desc.trim(),category_id:categoryId,amount:(income?1:-1)*Number(amount)};const r=editingId?await db.from('finance_transactions').update(payload).eq('id',editingId).eq('user_id',user.id):await db.from('finance_transactions').insert({...payload,user_id:user.id});setMsg(r.error?.message||(editingId?'Đã cập nhật giao dịch':'Đã thêm giao dịch'));if(!r.error){setModalOpen(false);await loadTransactions()}}
+ async function deleteTx(id){if(!window.confirm('Xoá giao dịch này?'))return;const r=await db.from('finance_transactions').delete().eq('id',id).eq('user_id',user.id);setMsg(r.error?.message||'Đã xoá giao dịch');if(!r.error)await loadTransactions()}
+ async function addWorkout(){if(!exercise||!sets||!reps)return setMsg('Chọn bài tập và nhập sets/reps.');const s=await db.from('workout_sessions').insert({user_id:user.id,workout_date:date,name:'Workout'}).select('id').single();if(s.error){setMsg(s.error.message);return}const rows=Array.from({length:Number(sets)},(_,i)=>({session_id:s.data.id,exercise_id:exercise,set_number:i+1,weight_kg:weight?Number(weight):null,reps:Number(reps)}));const r=await db.from('workout_sets').insert(rows);setMsg(r.error?.message||'Đã lưu buổi tập')}
+ const monthStats=useMemo(()=>({incomeTotal:transactions.filter(t=>Number(t.amount)>0).reduce((s,t)=>s+Number(t.amount),0),expenseTotal:transactions.filter(t=>Number(t.amount)<0).reduce((s,t)=>s+Math.abs(Number(t.amount)),0)}),[transactions])
+ if(!user)return <main className="auth-page"><div className="auth-visual"><div className="visual-top"><span className="leaf">◒</span><span className="visual-brand">Life<span>OS</span></span><span className="lang">VI⌄</span></div><div className="visual-copy"><h1>Một cuộc sống tốt hơn,<br/>bắt đầu từ những<br/><span>thói quen nhỏ mỗi ngày.</span></h1><div className="benefits"><div><b>⌁</b><span>Quản lý tài chính<br/>thông minh</span></div><div><b>♢</b><span>Theo dõi tập luyện<br/>và sức khoẻ</span></div><div><b>♜</b><span>Ghi lại dinh dưỡng<br/>hàng ngày</span></div></div></div><div className="desk-copy"><strong>Good<br/>Habits<br/>Better<br/>You</strong><small>“Sống có mục tiêu,<br/>không chỉ tồn tại.”</small></div></div><div className="auth-side"><div className="login-card"><div className="mini-logo">◒</div><h2>Đăng nhập</h2><p>Chào mừng bạn trở lại với LifeOS</p><label>Email<input placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)}/></label><label>Mật khẩu<input placeholder="Mật khẩu" type="password" value={password} onChange={e=>setPassword(e.target.value)}/></label><div className="login-row"><label className="remember"><input type="checkbox"/> Ghi nhớ đăng nhập</label><button className="link-btn">Quên mật khẩu?</button></div>{msg&&<small className="error">{msg}</small>}<button className="primary" onClick={login}>Đăng nhập <span>→</span></button><div className="divider"><span>Hoặc tiếp tục với</span></div><button className="google" onClick={login}><strong>G</strong> Đăng nhập bằng Google</button><div className="signup">Chưa có tài khoản? <button className="link-btn" onClick={signup}>Đăng ký ngay</button></div></div><footer>Better Habits<br/><strong>A Brighter You</strong></footer></div></main>
+ return <main className="app-shell"><aside className="sidebar"><div className="brand"><span>◒</span> Life<span>OS</span></div><nav>{navItems.map(([icon,label])=><button key={label} className={tab===label?'nav-item active':'nav-item'} onClick={()=>setTab(label)}><i>{icon}</i>{label}</button>)}</nav><div className="profile"><div className="avatar">{(user.email||'U')[0].toUpperCase()}</div><div><b>LifeOS User</b><small>{user.email}</small></div></div><button className="logout" onClick={()=>db.auth.signOut()}>↪ Đăng xuất</button></aside><section className="dashboard"><header className="topbar"><div className="mobile-brand">◒ Life<span>OS</span></div><div className="top-actions"><button>⌕</button><button>♧</button><button className="today">Hôm nay⌄</button></div></header>
+ {tab==='Overview'&&<><section className="hero"><div><span className="eyebrow">THỨ NĂM, 10 THÁNG 9, 2026</span><h1>Xin chào! 👋</h1><p>“Những thay đổi nhỏ hôm nay tạo nên kết quả lớn ngày mai.”</p></div><div className="hero-orb">◐</div></section><div className="stat-grid"><Stat icon="↗" label="Tổng thu nhập" value={money(monthStats.incomeTotal)} note="Từ dữ liệu giao dịch" tone="green"/><Stat icon="↘" label="Tổng chi tiêu" value={money(monthStats.expenseTotal)} note="Từ dữ liệu giao dịch" tone="red"/><Stat icon="✦" label="Tiết kiệm" value="8,000,000 ₫" note="Quỹ khẩn cấp" tone="mint"/><Stat icon="▣" label="Số dư khả dụng" value={money(monthStats.incomeTotal-monthStats.expenseTotal)} note="Thu nhập − chi tiêu" tone="blue"/></div><div className="analytics-grid"><FinanceChart/><SpendChart/></div><div className="lower-grid"><GymCard/><NutritionCard/><FundCard/></div><div className="bottom-grid"><ActivityCard transactions={transactions} onViewAll={()=>setTab('Finance')}/><GoalsCard/></div></>}
+ {tab==='Finance'&&<FinancePage transactions={transactions} onAdd={openAdd} onEdit={openEdit} onDelete={deleteTx}/>} {tab==='Gym'&&<section className="content-panel"><div className="section-heading"><div><span className="eyebrow">FITNESS</span><h2>Ghi nhận buổi tập</h2></div></div><div className="entry-card"><div className="form-grid"><select value={exercise} onChange={e=>setExercise(e.target.value)}><option value="">Chọn bài tập</option>{exercises.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select><input type="number" placeholder="Tạ (kg)" value={weight} onChange={e=>setWeight(e.target.value)}/><input type="number" placeholder="Reps" value={reps} onChange={e=>setReps(e.target.value)}/><input type="number" placeholder="Sets" value={sets} onChange={e=>setSets(e.target.value)}/><input type="date" value={date} onChange={e=>setDate(e.target.value)}/><button className="primary" onClick={addWorkout}>Lưu buổi tập</button></div>{msg&&<p className="message">{msg}</p>}</div></section>} {tab!=='Overview'&&tab!=='Finance'&&tab!=='Gym'&&<section className="content-panel"><span className="eyebrow">LIFEOS</span><h2>{tab}</h2><p className="muted">Khu vực {tab} đang được kết nối với LifeOS.</p></section>}</section>{modalOpen&&<TransactionModal editing={!!editingId} amount={amount} setAmount={setAmount} desc={desc} setDesc={setDesc} date={date} setDate={setDate} income={income} setIncome={v=>{setIncome(v);setCategoryId(v?'a8c62218-aeee-46fc-91ae-5602719303d5':'8199b7a5-6605-42d3-839d-2a84ecd90a91')}} categoryId={categoryId} setCategoryId={setCategoryId} categories={categories} msg={msg} onClose={()=>setModalOpen(false)} onSave={saveTx}/>}</main>
 }
 
-export default function Page() {
-  const [user, setUser] = useState(null)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [tab, setTab] = useState('Overview')
-  const [msg, setMsg] = useState('')
-  const [amount, setAmount] = useState('')
-  const [desc, setDesc] = useState('')
-  const [date, setDate] = useState(todayLocal())
-  const [income, setIncome] = useState(false)
-  const [reps, setReps] = useState('')
-  const [sets, setSets] = useState('')
-  const [weight, setWeight] = useState('')
-  const [exercise, setExercise] = useState('')
-  const [exercises, setExercises] = useState([])
-  const [transactions, setTransactions] = useState([])
+function FinancePage({transactions,onAdd,onEdit,onDelete}){const [filter,setFilter]=useState('all');const rows=transactions.filter(t=>filter==='all'||(filter==='income'?Number(t.amount)>0:Number(t.amount)<0));return <section className="content-panel finance-panel"><div className="section-heading finance-heading"><div><span className="eyebrow">FINANCE</span><h2>Giao dịch</h2><p className="muted">Toàn bộ thu nhập và chi tiêu của bạn.</p></div><button className="primary add-button" onClick={onAdd}>＋ Thêm giao dịch</button></div><div className="finance-toolbar"><div className="toggle filter-toggle"><button className={filter==='all'?'selected':''} onClick={()=>setFilter('all')}>Tất cả</button><button className={filter==='expense'?'selected':''} onClick={()=>setFilter('expense')}>Chi tiêu</button><button className={filter==='income'?'selected':''} onClick={()=>setFilter('income')}>Thu nhập</button></div><span>{rows.length} giao dịch</span></div><div className="transaction-table-wrap"><table className="transaction-table"><thead><tr><th>Ngày</th><th>Loại</th><th>Nội dung</th><th>Danh mục</th><th>Số tiền</th><th className="actions-col">Thao tác</th></tr></thead><tbody>{rows.length?rows.map(t=><tr key={t.id}><td>{dateText(t.occurred_on)}</td><td><span className={Number(t.amount)>0?'type-badge income-badge':'type-badge expense-badge'}>{Number(t.amount)>0?'Thu nhập':'Chi tiêu'}</span></td><td><strong>{t.description||'—'}</strong>{t.note&&<small className="table-note">{t.note}</small>}</td><td><span className="category-badge">{categoryNames[t.category_id]||'Khác'}</span></td><td className={Number(t.amount)>0?'positive amount-cell':'negative amount-cell'}>{Number(t.amount)>0?'+':'−'}{money(Math.abs(t.amount))}</td><td className="row-actions"><button onClick={()=>onEdit(t)} aria-label="Sửa">✎</button><button className="delete-action" onClick={()=>onDelete(t.id)} aria-label="Xoá">⌫</button></td></tr>):<tr><td colSpan="6"><div className="empty-table">Chưa có giao dịch. Bấm <b>＋ Thêm giao dịch</b> để bắt đầu.</div></td></tr>}</tbody></table></div></section>}
 
-  useEffect(() => {
-    db.auth.getSession().then(({ data }) => setUser(data.session?.user || null))
-    const x = db.auth.onAuthStateChange((_e, s) => setUser(s?.user || null))
-    return () => x.data.subscription.unsubscribe()
-  }, [])
+function TransactionModal({editing,amount,setAmount,desc,setDesc,date,setDate,income,setIncome,categoryId,setCategoryId,categories,msg,onClose,onSave}){const available=categories.length?categories.filter(c=>income?c.type==='income':['expense','debt'].includes(c.type)):(income?incomeCategories:expenseCategories).map(([id,name])=>({id,name,type:income?'income':'expense'}));return <div className="modal-backdrop" onMouseDown={e=>e.target===e.currentTarget&&onClose()}><div className="transaction-modal"><div className="modal-head"><div><span className="eyebrow">FINANCE</span><h2>{editing?'Chỉnh sửa giao dịch':'Thêm giao dịch'}</h2></div><button className="modal-close" onClick={onClose}>×</button></div><div className="toggle modal-toggle"><button className={!income?'selected':''} onClick={()=>setIncome(false)}>Chi tiêu</button><button className={income?'selected':''} onClick={()=>setIncome(true)}>Thu nhập</button></div><div className="modal-form"><label>Số tiền (VND)<input autoFocus type="number" min="0" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0"/></label><label>Ngày giao dịch<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label>Nội dung<input value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Ví dụ: Bún thịt nướng"/></label><label>Danh mục<select value={categoryId} onChange={e=>setCategoryId(e.target.value)}>{available.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label></div>{msg&&<p className="message">{msg}</p>}<div className="modal-actions"><button className="secondary-btn" onClick={onClose}>Huỷ</button><button className="primary" onClick={onSave}>{editing?'Lưu thay đổi':'Thêm giao dịch'}</button></div></div></div>}
 
-  useEffect(() => {
-    if (!user) return
-    db.from('exercises').select('id,name').order('name').then(({ data }) => setExercises(data || []))
-    loadTransactions()
-  }, [user])
-
-  async function loadTransactions() {
-    if (!user) return
-    const { data } = await db.from('finance_transactions').select('id,amount,description,occurred_on').order('occurred_on', { ascending: false }).limit(8)
-    setTransactions(data || [])
-  }
-
-  async function login() {
-    const r = await db.auth.signInWithPassword({ email, password })
-    setMsg(r.error?.message || '')
-  }
-
-  async function signup() {
-    const r = await db.auth.signUp({ email, password })
-    setMsg(r.error?.message || 'Check your email.')
-  }
-
-  async function addTx() {
-    if (!amount || !desc) return setMsg('Nhập số tiền và nội dung.')
-    const r = await db.from('finance_transactions').insert({
-      user_id: user.id,
-      occurred_on: date,
-      description: desc,
-      category_id: income ? 'a8c62218-aeee-46fc-91ae-5602719303d5' : '8199b7a5-6605-42d3-839d-2a84ecd90a91',
-      amount: (income ? 1 : -1) * Number(amount),
-    })
-    setMsg(r.error?.message || 'Đã lưu giao dịch')
-    if (!r.error) { setAmount(''); setDesc(''); loadTransactions() }
-  }
-
-  async function addWorkout() {
-    if (!exercise || !sets || !reps) return setMsg('Chọn bài tập và nhập sets/reps.')
-    const s = await db.from('workout_sessions').insert({ user_id: user.id, workout_date: date, name: 'Workout' }).select('id').single()
-    if (s.error) { setMsg(s.error.message); return }
-    const rows = Array.from({ length: Number(sets) }, (_, i) => ({ session_id: s.data.id, exercise_id: exercise, set_number: i + 1, weight_kg: weight ? Number(weight) : null, reps: Number(reps) }))
-    const r = await db.from('workout_sets').insert(rows)
-    setMsg(r.error?.message || 'Đã lưu buổi tập')
-  }
-
-  const monthStats = useMemo(() => {
-    const incomeTotal = transactions.filter(t => Number(t.amount) > 0).reduce((s, t) => s + Number(t.amount), 0)
-    const expenseTotal = transactions.filter(t => Number(t.amount) < 0).reduce((s, t) => s + Math.abs(Number(t.amount)), 0)
-    return { incomeTotal, expenseTotal }
-  }, [transactions])
-
-  if (!user) return (
-    <main className="auth-page">
-      <div className="auth-visual">
-        <div className="visual-top"><span className="leaf">◒</span><span className="visual-brand">Life<span>OS</span></span><span className="lang">VI⌄</span></div>
-        <div className="visual-copy">
-          <h1>Một cuộc sống tốt hơn,<br />bắt đầu từ những<br /><span>thói quen nhỏ mỗi ngày.</span></h1>
-          <div className="benefits">
-            <div><b>⌁</b><span>Quản lý tài chính<br />thông minh</span></div>
-            <div><b>♢</b><span>Theo dõi tập luyện<br />và sức khoẻ</span></div>
-            <div><b>♜</b><span>Ghi lại dinh dưỡng<br />hàng ngày</span></div>
-          </div>
-        </div>
-        <div className="desk-copy"><strong>Good<br />Habits<br />Better<br />You</strong><small>“Sống có mục tiêu,<br />không chỉ tồn tại.”</small></div>
-      </div>
-      <div className="auth-side">
-        <div className="login-card">
-          <div className="mini-logo">◒</div>
-          <h2>Đăng nhập</h2>
-          <p>Chào mừng bạn trở lại với LifeOS</p>
-          <label>Email<input placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} /></label>
-          <label>Mật khẩu<input placeholder="Mật khẩu" type="password" value={password} onChange={e => setPassword(e.target.value)} /></label>
-          <div className="login-row"><label className="remember"><input type="checkbox" /> Ghi nhớ đăng nhập</label><button className="link-btn">Quên mật khẩu?</button></div>
-          {msg && <small className="error">{msg}</small>}
-          <button className="primary" onClick={login}>Đăng nhập <span>→</span></button>
-          <div className="divider"><span>Hoặc tiếp tục với</span></div>
-          <button className="google" onClick={login}><strong>G</strong> Đăng nhập bằng Google</button>
-          <div className="signup">Chưa có tài khoản? <button className="link-btn" onClick={signup}>Đăng ký ngay</button></div>
-        </div>
-        <footer>Better Habits<br /><strong>A Brighter You</strong></footer>
-      </div>
-    </main>
-  )
-
-  const dashboardIncome = monthStats.incomeTotal || 14934000
-  const dashboardExpense = monthStats.expenseTotal || 4041000
-
-  return (
-    <main className="app-shell">
-      <aside className="sidebar">
-        <div className="brand"><span>◒</span> Life<span>OS</span></div>
-        <nav>{navItems.map(([icon, label]) => <button key={label} className={tab === label ? 'nav-item active' : 'nav-item'} onClick={() => setTab(label)}><i>{icon}</i>{label}</button>)}</nav>
-        <div className="profile"><div className="avatar">{(user.email || 'U')[0].toUpperCase()}</div><div><b>LifeOS User</b><small>{user.email}</small></div></div>
-        <button className="logout" onClick={() => db.auth.signOut()}>↪ Đăng xuất</button>
-      </aside>
-
-      <section className="dashboard">
-        <header className="topbar"><div className="mobile-brand">◒ Life<span>OS</span></div><div className="top-actions"><button>⌕</button><button>♧</button><button className="today">Hôm nay⌄</button></div></header>
-        {tab === 'Overview' && <>
-          <section className="hero"><div><span className="eyebrow">THỨ NĂM, 10 THÁNG 9, 2026</span><h1>Xin chào! 👋</h1><p>“Những thay đổi nhỏ hôm nay tạo nên kết quả lớn ngày mai.”</p></div><div className="hero-orb">◐</div></section>
-          <div className="stat-grid">
-            <Stat icon="↗" label="Tổng thu nhập" value={money(dashboardIncome)} note="+100% so với tháng trước" tone="green" />
-            <Stat icon="↘" label="Tổng chi tiêu" value={money(dashboardExpense)} note="-23% so với tháng trước" tone="red" />
-            <Stat icon="✦" label="Tiết kiệm" value="8,000,000 ₫" note="53% mục tiêu" tone="mint" />
-            <Stat icon="▣" label="Số dư khả dụng" value="2,893,000 ₫" note="Dành cho chi tiêu" tone="blue" />
-          </div>
-          <div className="analytics-grid"><FinanceChart /><SpendChart /></div>
-          <div className="lower-grid"><GymCard /><NutritionCard /><FundCard /></div>
-          <div className="bottom-grid"><ActivityCard transactions={transactions} /><GoalsCard /></div>
-        </>}
-
-        {tab === 'Finance' && <section className="content-panel"><div className="section-heading"><div><span className="eyebrow">FINANCE</span><h2>Ghi nhận giao dịch</h2></div><button className="pill">Tháng 9 ⌄</button></div><div className="entry-card"><div className="toggle"><button className={!income ? 'selected' : ''} onClick={() => setIncome(false)}>Chi tiêu</button><button className={income ? 'selected' : ''} onClick={() => setIncome(true)}>Thu nhập</button></div><div className="form-grid"><input type="number" placeholder="Số tiền (VND)" value={amount} onChange={e => setAmount(e.target.value)} /><input placeholder="Nội dung" value={desc} onChange={e => setDesc(e.target.value)} /><input type="date" value={date} onChange={e => setDate(e.target.value)} /><button className="primary" onClick={addTx}>Lưu giao dịch</button></div>{msg && <p className="message">{msg}</p>}</div></section>}
-        {tab === 'Gym' && <section className="content-panel"><div className="section-heading"><div><span className="eyebrow">FITNESS</span><h2>Ghi nhận buổi tập</h2></div></div><div className="entry-card"><div className="form-grid"><select value={exercise} onChange={e => setExercise(e.target.value)}><option value="">Chọn bài tập</option>{exercises.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select><input type="number" placeholder="Tạ (kg)" value={weight} onChange={e => setWeight(e.target.value)} /><input type="number" placeholder="Reps" value={reps} onChange={e => setReps(e.target.value)} /><input type="number" placeholder="Sets" value={sets} onChange={e => setSets(e.target.value)} /><input type="date" value={date} onChange={e => setDate(e.target.value)} /><button className="primary" onClick={addWorkout}>Lưu buổi tập</button></div>{msg && <p className="message">{msg}</p>}</div></section>}
-        {tab !== 'Overview' && tab !== 'Finance' && tab !== 'Gym' && <section className="content-panel"><span className="eyebrow">LIFEOS</span><h2>{tab}</h2><p className="muted">Khu vực {tab} đang được kết nối với LifeOS.</p></section>}
-      </section>
-    </main>
-  )
-}
-
-function Stat({ icon, label, value, note, tone }) {
-  return <div className="stat-card"><div className={`stat-icon ${tone}`}>{icon}</div><div><span>{label}</span><strong>{value}</strong><small className={tone}>{note}</small></div><b className="arrow">›</b></div>
-}
-
-function FinanceChart() {
-  const bars = [16, 9, 6, 20, 8, 10, 6, 42, 25, 8]
-  return <div className="chart-card"><div className="card-head"><div><h3>Tổng quan tài chính</h3><small>Triệu (₫)</small></div><div className="legend"><span>● Thu nhập</span><span>● Chi tiêu</span></div></div><div className="bars">{bars.map((h, i) => <div className="bar-col" key={i}><div className="bar income-bar" style={{height: `${h}px`}}></div><div className="bar expense-bar" style={{height: `${Math.max(5, h / 2)}px`}}></div><small>{i + 1}/9</small></div>)}</div></div>
-}
-
-function SpendChart() {
-  return <div className="chart-card spend"><div className="card-head"><h3>Phân bổ chi tiêu</h3></div><div className="donut"><div><strong>4,041,000 ₫</strong><small>Tháng này</small></div></div><ul><li><i className="dot d1" />Nhà ở <b>56.9%</b></li><li><i className="dot d2" />Ăn uống <b>18.8%</b></li><li><i className="dot d3" />Mua sắm <b>6.7%</b></li><li><i className="dot d4" />Di chuyển <b>6.2%</b></li><li><i className="dot d5" />Gia đình <b>5.4%</b></li><li><i className="dot d6" />Khác <b>6.0%</b></li></ul></div>
-}
-
-function GymCard() { return <div className="mini-card"><div className="card-head"><h3>Gym gần đây</h3><button className="link-btn">Xem tất cả</button></div><div className="gym-row"><span className="round-icon">♢</span><div><b>Leg Day</b><small>10/09/2026</small><em>Squat 4×12 (190kg)</em><em>Nhún chân 30×30 (30kg)</em></div></div></div> }
-function NutritionCard() { return <div className="mini-card nutrition"><div className="card-head"><h3>Dinh dưỡng hôm nay</h3><button className="link-btn">Thêm món ›</button></div><div className="nutrition-body"><div className="cal-ring"><strong>1,250</strong><small>/ 2,000 kcal</small></div><div className="macros"><Macro name="Protein" value="62g / 150g" width="42%" /><Macro name="Carbs" value="180g / 250g" width="72%" /><Macro name="Fat" value="40g / 70g" width="57%" /></div></div></div> }
-function Macro({ name, value, width }) { return <div><span>{name} <b>{value}</b></span><i><em style={{width}} /></i></div> }
-function FundCard() { return <div className="mini-card"><div className="card-head"><h3>Quỹ tiết kiệm</h3><button className="link-btn">Xem chi tiết</button></div><div className="fund-row"><span className="round-icon">✦</span><div><b>Quỹ khẩn cấp</b><strong>8,000,000 ₫</strong><small>Mục tiêu: 8,000,000 ₫</small></div><span className="shield">✓</span></div><div className="progress"><i style={{width:'100%'}} /></div></div> }
-function ActivityCard({ transactions }) { const rows = transactions.slice(0, 4); return <div className="wide-card"><div className="card-head"><h3>Hoạt động gần đây</h3><button className="link-btn">Xem tất cả</button></div>{rows.length ? rows.map(t => <div className="activity" key={t.id}><span className={Number(t.amount) > 0 ? 'activity-icon up' : 'activity-icon down'}>{Number(t.amount) > 0 ? '↑' : '↓'}</span><div><b>{Number(t.amount) > 0 ? 'Thu nhập' : 'Chi tiêu'}</b><small>{t.description}</small></div><strong className={Number(t.amount) > 0 ? 'positive' : 'negative'}>{money(Math.abs(t.amount))}</strong></div>) : <div className="empty">Chưa có giao dịch gần đây.</div>}</div> }
-function GoalsCard() { return <div className="wide-card"><div className="card-head"><h3>Mục tiêu tháng 9</h3><button className="link-btn">Chỉnh sửa</button></div><Goal icon="✦" name="Tiết kiệm" value="8,000,000 / 10,000,000 ₫" percent="80%" width="80%" /><Goal icon="♢" name="Tập gym" value="12 / 16 buổi" percent="75%" width="75%" /><Goal icon="♡" name="Dinh dưỡng" value="1,250 / 2,000 kcal" percent="63%" width="63%" /></div> }
-function Goal({ icon, name, value, percent, width }) { return <div className="goal"><span className="round-icon">{icon}</span><div><b>{name}</b><small>{value}</small><i><em style={{width}} /></i></div><strong>{percent}</strong></div> }
+function Stat({icon,label,value,note,tone}){return <div className="stat-card"><div className={`stat-icon ${tone}`}>{icon}</div><div><span>{label}</span><strong>{value}</strong><small className={tone}>{note}</small></div><b className="arrow">›</b></div>}
+function FinanceChart(){const bars=[16,9,6,20,8,10,6,42,25,8];return <div className="chart-card"><div className="card-head"><div><h3>Tổng quan tài chính</h3><small>Triệu (₫)</small></div><div className="legend"><span>● Thu nhập</span><span>● Chi tiêu</span></div></div><div className="bars">{bars.map((h,i)=><div className="bar-col" key={i}><div className="bar income-bar" style={{height:`${h}px`}}></div><div className="bar expense-bar" style={{height:`${Math.max(5,h/2)}px`}}></div><small>{i+1}/9</small></div>)}</div></div>}
+function SpendChart(){return <div className="chart-card spend"><div className="card-head"><h3>Phân bổ chi tiêu</h3></div><div className="donut"><div><strong>4,041,000 ₫</strong><small>Tháng này</small></div></div><ul><li><i className="dot d1"/>Nhà ở <b>56.9%</b></li><li><i className="dot d2"/>Ăn uống <b>18.8%</b></li><li><i className="dot d3"/>Mua sắm <b>6.7%</b></li><li><i className="dot d4"/>Di chuyển <b>6.2%</b></li><li><i className="dot d5"/>Gia đình <b>5.4%</b></li><li><i className="dot d6"/>Khác <b>6.0%</b></li></ul></div>}
+function GymCard(){return <div className="mini-card"><div className="card-head"><h3>Gym gần đây</h3><button className="link-btn">Xem tất cả</button></div><div className="gym-row"><span className="round-icon">♢</span><div><b>Leg Day</b><small>10/09/2026</small><em>Squat 4×12 (190kg)</em><em>Nhún chân 30×30 (30kg)</em></div></div></div>}
+function NutritionCard(){return <div className="mini-card nutrition"><div className="card-head"><h3>Dinh dưỡng hôm nay</h3><button className="link-btn">Thêm món ›</button></div><div className="nutrition-body"><div className="cal-ring"><strong>1,250</strong><small>/ 2,000 kcal</small></div><div className="macros"><Macro name="Protein" value="62g / 150g" width="42%"/><Macro name="Carbs" value="180g / 250g" width="72%"/><Macro name="Fat" value="40g / 70g" width="57%"/></div></div></div>}
+function Macro({name,value,width}){return <div><span>{name} <b>{value}</b></span><i><em style={{width}}/></i></div>}
+function FundCard(){return <div className="mini-card"><div className="card-head"><h3>Quỹ tiết kiệm</h3><button className="link-btn">Xem chi tiết</button></div><div className="fund-row"><span className="round-icon">✦</span><div><b>Quỹ khẩn cấp</b><strong>8,000,000 ₫</strong><small>Mục tiêu: 8,000,000 ₫</small></div><span className="shield">✓</span></div><div className="progress"><i style={{width:'100%'}}/></div></div>}
+function ActivityCard({transactions,onViewAll}){const rows=transactions.slice(0,4);return <div className="wide-card"><div className="card-head"><h3>Giao dịch gần đây</h3><button className="link-btn" onClick={onViewAll}>Xem tất cả →</button></div>{rows.length?rows.map(t=><div className="activity" key={t.id}><span className={Number(t.amount)>0?'activity-icon up':'activity-icon down'}>{Number(t.amount)>0?'↑':'↓'}</span><div><b>{t.description||'Giao dịch'}</b><small>{dateText(t.occurred_on)}</small></div><strong className={Number(t.amount)>0?'positive':'negative'}>{Number(t.amount)>0?'+':'−'}{money(Math.abs(t.amount))}</strong></div>):<div className="empty">Chưa có giao dịch gần đây.</div>}</div>}
+function GoalsCard(){return <div className="wide-card"><div className="card-head"><h3>Mục tiêu tháng 9</h3><button className="link-btn">Chỉnh sửa</button></div><Goal icon="✦" name="Tiết kiệm" value="8,000,000 / 10,000,000 ₫" percent="80%" width="80%"/><Goal icon="♢" name="Tập gym" value="12 / 16 buổi" percent="75%" width="75%"/><Goal icon="♡" name="Dinh dưỡng" value="1,250 / 2,000 kcal" percent="63%" width="63%"/></div>}
+function Goal({icon,name,value,percent,width}){return <div className="goal"><span className="round-icon">{icon}</span><div><b>{name}</b><small>{value}</small><i><em style={{width}}/></i></div><strong>{percent}</strong></div>}
