@@ -3,7 +3,6 @@
 import { useEffect } from 'react'
 
 const rawValues = new WeakMap()
-const nativeValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
 const moneyPattern = /(^|[-_\s])(amount|money|price|cost|income|expense)([-_\s]|$)/i
 
 function isMoneyInput(el) {
@@ -37,6 +36,7 @@ function caretFromRawIndex(formatted, index) {
 
 export default function MoneyInputFormatter() {
   useEffect(() => {
+    const nativeValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
     const patch = (el) => {
       if (!isMoneyInput(el) || el.dataset.moneyPatched === '1') return
       el.dataset.moneyPatched = '1'
@@ -82,9 +82,7 @@ export default function MoneyInputFormatter() {
             next = raw.slice(0, rawStart) + raw.slice(rawStart + 1)
             nextCaret = rawStart
           }
-        } else {
-          return
-        }
+        } else return
 
         event.preventDefault()
         rawValues.set(el, next)
@@ -104,7 +102,6 @@ export default function MoneyInputFormatter() {
     scan()
     const observer = new MutationObserver(scan)
     observer.observe(document.body, { childList: true, subtree: true })
-
     return () => observer.disconnect()
   }, [])
 
